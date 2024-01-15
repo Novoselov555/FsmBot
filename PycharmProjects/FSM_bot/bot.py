@@ -25,7 +25,7 @@ class FSMFillForm(StatesGroup):
 
 @dp.message(CommandStart(), StateFilter(default_state))
 async def process_start_command(message: Message):
-    await message.answer(text='Вас приветствует бот по определению уровня'
+    await message.answer(text='Вас приветствует бот по определению уровня '
                               'Вашей финансовой грамотности.\n\n'
                               'Чтобы перейти к заполнению анкеты - '
                               'отправьте команду /fillform'
@@ -90,7 +90,6 @@ async def warning_not_surname(message: Message):
                    F.data.in_(['grade_7', 'grade_11']))
 async def process_grade_pass(callback: CallbackQuery, state: FSMContext):
     await state.update_data(grade=callback.data)
-    await callback.message.delete()
     button_first_test_true = InlineKeyboardButton(
         text='Да',
         callback_data='pass_first_test'
@@ -107,7 +106,7 @@ async def process_grade_pass(callback: CallbackQuery, state: FSMContext):
         reply_markup=markup
     )
 
-    await state.set_state(FSMFillForm.fill_wish_data)
+    await state.set_state(FSMFillForm.fill_first_test)
 
 
 @dp.message(StateFilter(FSMFillForm.fill_grade))
@@ -137,7 +136,7 @@ async def process_first_test_pass(callback: CallbackQuery, state: FSMContext):
     await callback.message.answer(
         text='Спасибо!\n\n'
              'Остался последний шаг.\n'
-             'Хотели бы вы получать новости?',
+             'Хотите получить данные опроса?',
         reply_markup=markup
     )
 
@@ -170,7 +169,7 @@ async def process_fill_data_press(callback: CallbackQuery, state: FSMContext):
     )
 
 
-@dp.message(StateFilter(FSMFillForm.fill_wish_data))
+@dp.message(Command(commands='showdata'))
 async def process_showdata_command(message: Message):
     if message.from_user.id in user_dict:
         await message.answer(
