@@ -87,7 +87,7 @@ async def warning_not_surname(message: Message):
 
 
 @dp.callback_query(StateFilter(FSMFillForm.fill_grade),
-                   F.data.in_['grade_7', 'grade_11'])
+                   F.data.in_(['grade_7', 'grade_11']))
 async def process_grade_pass(callback: CallbackQuery, state: FSMContext):
     await state.update_data(grade=callback.data)
     await callback.message.delete()
@@ -120,7 +120,7 @@ async def warning_not_grade(message: Message):
     )
 
 
-@dp.callback_query(StateFilter(FSMFillForm.fill_first_test), F.data.in_['pass_first_test'], ['not_pass_first_test'])
+@dp.callback_query(StateFilter(FSMFillForm.fill_first_test), F.data.in_(['pass_first_test', 'not_pass_first_test']))
 async def process_first_test_pass(callback: CallbackQuery, state: FSMContext):
     await state.update_data(first_test=callback.data)
     yes_data_button = InlineKeyboardButton(
@@ -154,7 +154,7 @@ async def warning_not_first_test(message: Message):
     )
 
 
-@dp.callback_query(StateFilter(FSMFillForm.fill_wish_data), F.data.in_['yes_data', 'no_data'])
+@dp.callback_query(StateFilter(FSMFillForm.fill_wish_data), F.data.in_(['yes_data', 'no_data']))
 async def process_fill_data_press(callback: CallbackQuery, state: FSMContext):
     await state.update_data(wish_data=callback.data == 'yes_data')
     user_dict[callback.from_user.id] = await state.get_data()
