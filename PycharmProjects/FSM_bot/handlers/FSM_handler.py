@@ -1,21 +1,21 @@
-from aiogram import F, Router
+from aiogram import F, Router, Bot
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command, CommandStart, StateFilter
-from aiogram.filters.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import default_state
 from aiogram.types import (CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message)
 
-from database.database import user_dict
+from config_data.config import load_config, Config
+from database.database import BotDB
 from lexicon.lexicon import LEXICON
+from states.states import FSMFillForm, FSMFirstTest
 
 router = Router()
+BotDB = BotDB('my_database.db')
+config: Config = load_config()
+BOT_TOKEN: str = config.tg_bot.token
 
-
-class FSMFillForm(StatesGroup):
-    fill_surname = State()
-    fill_grade = State()
-    fill_first_test = State()
-    fill_wish_data = State()
+bot = Bot(BOT_TOKEN)
 
 
 @router.message(CommandStart(), StateFilter(default_state))
@@ -29,16 +29,26 @@ async def process_cancel_command(message: Message):
 
 
 @router.message(Command(commands='cancel'), ~StateFilter(default_state))
-async def process_cancel_command_state(message: Message, state: FSMContext):
+async def process_cancel_command_state(message: Message, state: FSMContext, bot: Bot):
     await message.answer(text=LEXICON['/cancel_state'])
-
+    try:
+        # Все сообщения, начиная с текущего и до первого (message_id = 0)
+        for i in range(message.message_id, 0, -1):
+            await bot.delete_message(message.from_user.id, i)
+    except TelegramBadRequest as ex:
+        # Если сообщение не найдено (уже удалено или не существует),
+        # код ошибки будет "Bad Request: message to delete not found"
+        if ex.message == "Bad Request: message to delete not found":
+            print("Все сообщения удалены🙂")
+    BotDB.del_row(message.from_user.id)
     await state.clear()
 
 
 @router.message(Command(commands='fillform'), StateFilter(default_state))
 async def process_fillform_command(message: Message, state: FSMContext):
+    if not BotDB.user_exists(message.from_user.id):
+        BotDB.add_user(message.from_user.id)
     await message.answer(text=LEXICON['surname'])
-
     await state.set_state(FSMFillForm.fill_surname)
 
 
@@ -99,59 +109,48 @@ async def warning_not_grade(message: Message):
 @router.callback_query(StateFilter(FSMFillForm.fill_first_test), F.data.in_(['pass_first_test', 'not_pass_first_test']))
 async def process_first_test_pass(callback: CallbackQuery, state: FSMContext):
     await state.update_data(first_test=callback.data)
-    yes_data_button = InlineKeyboardButton(
-        text='Да',
-        callback_data='yes_data'
-    )
-    no_data_button = InlineKeyboardButton(
-        text='Нет',
-        callback_data='no_data'
-    )
-    keyboard: list[list[InlineKeyboardButton]] = [[yes_data_button], [no_data_button]]
-    markup = InlineKeyboardMarkup(inline_keyboard=keyboard)
+    if callback.data == 'pass_first_test':
+        data = await state.get_data()
+        surname = data.get("surname")
+        grade = int(data.get("grade").split('_')[-1])
+        first_test = data.get("first_test")
+        BotDB.add_data(surname, grade, first_test, 0, 0, 0, 1, 0, 0, callback.from_user.id)
 
-    await callback.message.edit_text(
-        text=LEXICON['data'],
-        reply_markup=markup
-    )
+        await callback.message.edit_text(
+            text='Спасибо! Ваши данные сохранены!✔'
+        )
 
-    await state.set_state(FSMFillForm.fill_wish_data)
+        a_button_1 = InlineKeyboardButton(
+            text='a)',
+            callback_data='a_but_1'
+        )
+        b_button_1 = InlineKeyboardButton(
+            text='b)',
+            callback_data='b_but_1'
+        )
+        c_button_1 = InlineKeyboardButton(
+            text='c)',
+            callback_data='c_but_1'
+        )
+        keyboard: list[list[InlineKeyboardButton]] = [[a_button_1, b_button_1, c_button_1]]
+        markup = InlineKeyboardMarkup(inline_keyboard=keyboard)
+
+        await callback.message.answer(
+            text=LEXICON['first_question'],
+            reply_markup=markup
+        )
+        await state.set_state(FSMFirstTest.first_question)
+    else:
+        BotDB.del_row(callback.from_user.id)
+        await callback.message.edit_text(
+            text='Ну вот, а я думал, что вы захотите участвовать в моем тесте(((\n\n'
+                 'Может, попробуем еще раз?🙃\n'
+                 'Для этого введите команду /fillform'
+        )
+        await state.clear()
 
 
 @router.message(StateFilter(FSMFillForm.fill_first_test))
 async def warning_not_first_test(message: Message):
     await message.answer(
         text=LEXICON['not_first_test'])
-
-
-@router.callback_query(StateFilter(FSMFillForm.fill_wish_data), F.data.in_(['yes_data', 'no_data']))
-async def process_fill_data_press(callback: CallbackQuery, state: FSMContext):
-    await state.update_data(wish_data=callback.data == 'yes_data')
-    user_dict[callback.from_user.id] = await state.get_data()
-    await state.clear()
-    await callback.message.edit_text(
-        text='Спасибо! Ваши данные сохранены!\n\n'
-             'Вы вышли из опроса'
-    )
-
-    await callback.message.answer(
-        text='Чтобы посмотреть данные вашей '
-             'анкеты - отправьте команду /showdata'
-    )
-
-
-@router.message(Command(commands='showdata'))
-async def process_showdata_command(message: Message):
-    if message.from_user.id in user_dict:
-        await message.answer(
-            text=f'Имя: {user_dict[message.from_user.id]["surname"]} \n'
-                 f'Класс: {user_dict[message.from_user.id]["grade"]}\n'
-                 f'Соглашение на тест: {user_dict[message.from_user.id]["first_test"]}\n'
-                 f'Ваши данные: {user_dict[message.from_user.id]["wish_data"]}\n'
-        )
-    else:
-        await message.answer(
-            text='Вы еще не заполняли анкету. '
-                 'Чтобы приступить - отправьте '
-                 'команду /fillform'
-        )
