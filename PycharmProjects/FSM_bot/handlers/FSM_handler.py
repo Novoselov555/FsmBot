@@ -114,7 +114,7 @@ async def process_first_test_pass(callback: CallbackQuery, state: FSMContext):
         surname = data.get("surname")
         grade = int(data.get("grade").split('_')[-1])
         first_test = data.get("first_test")
-        BotDB.add_data(surname, grade, first_test, 0, 0, 1, 0, 0, 0, callback.from_user.id)
+        BotDB.add_data(surname, grade, first_test, 0, 0, 0, 1, 0, 0, callback.from_user.id)
 
         await callback.message.edit_text(
             text='Спасибо! Ваши данные сохранены!✔'
